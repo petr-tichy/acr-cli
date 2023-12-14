@@ -24,7 +24,7 @@ import (
 const (
 	prefixHTTPS                      = "https://"
 	registryURL                      = ".azurecr.io"
-	manifestTagFetchCount            = 100
+	manifestTagFetchCount            = 1000
 	manifestORASArtifactContentType  = "application/vnd.cncf.oras.artifact.manifest.v1+json"
 	manifestOCIArtifactContentType   = "application/vnd.oci.artifact.manifest.v1+json"
 	manifestOCIImageContentType      = v1.MediaTypeImageManifest

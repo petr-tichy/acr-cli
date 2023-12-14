@@ -5,6 +5,7 @@ GO_GCFLAGS=$(shell				\
 	set -- ${GOPATHS};			\
 	echo "-gcflags=-trimpath=$${1}/src";	\
 	)
+#GO_GCFLAGS=-gcflags="all=-N -l"
 GO_BUILD_FLAGS=
 GO_EXTRA_FLAGS=
 GO_TAGS=

@@ -31,19 +31,19 @@ const (
     	acr purge -r example --filter "hello-world:.*" --ago 1d
 
   - Delete all tags that are older than 7 days in the example.azurecr.io registry inside all repositories
-	    acr purge -r example --filter ".*:.*" --ago 7d 
+	    acr purge -r example --filter ".*:.*" --ago 7d
 
   - Delete all tags that are older than 7 days and begin with hello in the example.azurecr.io registry inside the hello-world repository
-    	acr purge -r example --filter "hello-world:^hello.*" --ago 7d 
+    	acr purge -r example --filter "hello-world:^hello.*" --ago 7d
 
   - Delete all tags that are older than 7 days, begin with hello, keeping the latest 2 in example.azurecr.io registry inside the hello-world repository
     	acr purge -r example --filter "hello-world:^hello.*" --ago 7d --keep 2
 
-  - Delete all tags that contain the word test in the tag name and are older than 5 days in the example.azurecr.io registry inside the hello-world 
+  - Delete all tags that contain the word test in the tag name and are older than 5 days in the example.azurecr.io registry inside the hello-world
     repository, after that, remove the dangling manifests in the same repository
-	acr purge -r example --filter "hello-world:\w*test\w*" --ago 5d --untagged 
+	acr purge -r example --filter "hello-world:\w*test\w*" --ago 5d --untagged
 
-  - Delete all tags older than 1 day in the example.azurecr.io registry inside the hello-world repository using the credentials found in 
+  - Delete all tags older than 1 day in the example.azurecr.io registry inside the hello-world repository using the credentials found in
     the C://Users/docker/config.json path
 	acr purge -r example --filter "hello-world:.*" --ago 1d --config C://Users/docker/config.json
 
@@ -77,6 +77,7 @@ type purgeParameters struct {
 	untagged      bool
 	dryRun        bool
 	concurrency   int
+	repos         []string
 }
 
 // newPurgeCmd defines the purge command.
@@ -101,7 +102,7 @@ func newPurgeCmd(rootParams *rootParameters) *cobra.Command {
 				return err
 			}
 			// A map is used to collect the regex tags for every repository.
-			tagFilters, err := collectTagFilters(ctx, purgeParams.filters, acrClient.AutorestClient, purgeParams.filterTimeout)
+			tagFilters, err := collectTagFilters(ctx, purgeParams.filters, acrClient.AutorestClient, purgeParams.filterTimeout, purgeParams.repos)
 			if err != nil {
 				return err
 			}
@@ -165,6 +166,7 @@ func newPurgeCmd(rootParams *rootParameters) *cobra.Command {
 	cmd.Flags().StringVar(&purgeParams.ago, "ago", "", "The tags that were last updated before this duration will be deleted, the format is [number]d[string] where the first number represents an amount of days and the string is in a Go duration format (e.g. 2d3h6m selects images older than 2 days, 3 hours and 6 minutes)")
 	cmd.Flags().IntVar(&purgeParams.keep, "keep", 0, "Number of latest to-be-deleted tags to keep, use this when you want to keep at least x number of latest tags that could be deleted meeting all other filter criteria")
 	cmd.Flags().StringArrayVarP(&purgeParams.filters, "filter", "f", nil, "Specify the repository and a regular expression filter for the tag name, if a tag matches the filter and is older than the duration specified in ago it will be deleted. Note: If backtracking is used in the regexp it's possible for the expression to run into an infinite loop. The default timeout is set to 1 minute for evaluation of any filter expression. Use the '--filter-timeout-seconds' option to set a different value.")
+	cmd.Flags().StringArrayVarP(&purgeParams.repos, "repos", "", nil, "Specify the repositories")
 	cmd.Flags().StringArrayVarP(&purgeParams.configs, "config", "c", nil, "Authentication config paths (e.g. C://Users/docker/config.json)")
 	cmd.Flags().Uint64Var(&purgeParams.filterTimeout, "filter-timeout-seconds", defaultRegexpMatchTimeoutSeconds, "This limits the evaluation of the regex filter, and will return a timeout error if this duration is exceeded during a single evaluation. If written incorrectly a regexp filter with backtracking can result in an infinite loop.")
 	cmd.Flags().IntVar(&purgeParams.concurrency, "concurrency", defaultPoolSize, concurrencyDescription)
@@ -219,10 +221,15 @@ func purgeTags(ctx context.Context, acrClient api.AcrCLIClientInterface, poolSiz
 }
 
 // collectTagFilters collects all matching repos and collects the associated tag filters
-func collectTagFilters(ctx context.Context, rawFilters []string, client acrapi.BaseClientAPI, regexMatchTimeout uint64) (map[string]string, error) {
-	allRepoNames, err := getAllRepositoryNames(ctx, client)
-	if err != nil {
-		return nil, err
+func collectTagFilters(ctx context.Context, rawFilters []string, client acrapi.BaseClientAPI, regexMatchTimeout uint64, allRepoNames []string) (map[string]string, error) {
+	if allRepoNames == nil {
+		_allRepoNames, err := getAllRepositoryNames(ctx, client)
+		if err != nil {
+			return nil, err
+		}
+		allRepoNames = _allRepoNames
+	} else {
+		fmt.Printf("Scanning only repos %s\n", allRepoNames)
 	}
 
 	tagFilters := map[string]string{}
@@ -576,6 +583,7 @@ func dryRunPurge(ctx context.Context, acrClient api.AcrCLIClientInterface, login
 		candidatesToDelete := []acr.ManifestAttributesBase{}
 		for resultManifests != nil && resultManifests.ManifestsAttributes != nil {
 			manifests := *resultManifests.ManifestsAttributes
+			fmt.Printf("loop acrClient.GetAcrManifests %d\n", len(manifests))
 			for _, manifest := range manifests {
 				if tagsCount[*manifest.Digest] != deletedTags[*manifest.Digest] {
 					// If the number of the tags associated with the manifest is  not equal to
